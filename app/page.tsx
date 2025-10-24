@@ -18,6 +18,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { CalendarDays, CheckCircle2, ListChecks, Plus, Rocket, Table2, Trophy, Users } from 'lucide-react'
+import { TaskComments } from '@/components/TaskComments'
+
 
 // ====== 定義 ======
 const PHASES = ['要件定義','撮影環境設計','ワークフロー設計','テンプレ/指示書','PoC/内製化トレーニング','運用移行'] as const
@@ -63,6 +65,59 @@ function kpi(tasks: TaskRow[]) {
   const overall = Math.round(tasks.reduce((acc, t) => acc + percentComplete(t), 0) / (tasks.length || 1))
   return { total, urgent, dueSoon, overall }
 }
+
+function AuthButtons() {
+  const [session, setSession] = React.useState<any>(null)
+  const [email, setEmail] = React.useState('')
+  const [sending, setSending] = React.useState(false)
+  const [sent, setSent] = React.useState(false)
+
+  React.useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  async function signIn() {
+    if (!email) return
+    setSending(true)
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin }
+    })
+    setSending(false)
+    if (error) { alert(error.message); return }
+    setSent(true)
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut()
+    window.location.reload()
+  }
+
+  if (session) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">{session.user?.email}</span>
+        <Button variant="outline" onClick={signOut}>ログアウト</Button>
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-center gap-2">
+      {sent ? (
+        <span className="text-xs text-muted-foreground">メールのMagic Linkを確認してください</span>
+      ) : (
+        <>
+          <Input type="email" placeholder="you@example.com"
+                 value={email} onChange={(e)=>setEmail(e.target.value)} className="w-56" />
+          <Button onClick={signIn} disabled={!email || sending}>ログイン</Button>
+        </>
+      )}
+    </div>
+  )
+}
+
 
 export default function Page() {
   const [tasks, setTasks] = useState<TaskRow[]>([])
@@ -176,79 +231,138 @@ export default function Page() {
     <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-white p-6">
       <div className="mx-auto max-w-7xl">
 
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">ささげ内製化サービスプロジェクト</h1>
-            <p className="text-sm text-slate-500">MVPダッシュボード（Supabase 永続化対応）</p>
+{/* Header */}
+<div className="mb-6 flex items-center justify-between">
+  <div>
+    <h1 className="text-2xl font-semibold">ささげ内製化サービスプロジェクト</h1>
+    <p className="text-sm text-slate-500">MVPダッシュボード（Supabase 永続化対応）</p>
+  </div>
+
+  <div className="flex items-center gap-3">
+    <AuthButtons />
+
+    <Input
+      placeholder="検索（タイトル/顧客/メモ）"
+      value={q}
+      onChange={(e) => setQ(e.target.value)}
+      className="w-64"
+    />
+
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button className="gap-2">
+          <Plus className="h-4 w-4" />
+          タスク追加
+        </Button>
+      </DialogTrigger>
+
+      {/* ここからモーダルの中身（必ず Dialog の内側に置く） */}
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>新規タスク</DialogTitle>
+          <DialogDescription>入力後、Supabaseに保存されます。</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-3 py-2">
+          <Label>タイトル</Label>
+          <Input
+            value={newTask.title ?? ''}
+            onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+            placeholder="例：初品チェック票 v1 リリース"
+          />
+
+          <Label className="mt-2">フェーズ</Label>
+          <Select
+            value={newTask.phase ?? ''}
+            onValueChange={(v) => setNewTask({ ...newTask, phase: v })}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {PHASES.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
+            </SelectContent>
+          </Select>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>担当</Label>
+              <Select
+                value={newTask.assignee ?? ''}
+                onValueChange={(v) => setNewTask({ ...newTask, assignee: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ASSIGNEES.map((a) => (<SelectItem key={a} value={a}>{a}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>優先度</Label>
+              <Select
+                value={(newTask.priority as any) ?? ''}
+                onValueChange={(v) => setNewTask({ ...newTask, priority: v as any })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PRIORITIES.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Input placeholder="検索（タイトル/顧客/メモ）" value={q} onChange={(e) => setQ(e.target.value)} className="w-64" />
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button className="gap-2"><Plus className="h-4 w-4" />タスク追加</Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                  <DialogTitle>新規タスク</DialogTitle>
-                  <DialogDescription>入力後、Supabaseに保存されます。</DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-3 py-2">
-                  <Label>タイトル</Label>
-                  <Input value={newTask.title ?? ''} onChange={(e) => setNewTask({ ...newTask, title: e.target.value })} placeholder="例：初品チェック票 v1 リリース" />
 
-                  <Label className="mt-2">フェーズ</Label>
-                  <Select value={newTask.phase ?? ''} onValueChange={(v) => setNewTask({ ...newTask, phase: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {PHASES.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>期限</Label>
+              <Input
+                type="date"
+                value={newTask.due_date ?? ''}
+                onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>顧客/区分</Label>
+              <Input
+                value={newTask.customer ?? ''}
+                onChange={(e) => setNewTask({ ...newTask, customer: e.target.value })}
+              />
+            </div>
+          </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label>担当</Label>
-                      <Select value={newTask.assignee ?? ''} onValueChange={(v) => setNewTask({ ...newTask, assignee: v })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {ASSIGNEES.map((a) => (<SelectItem key={a} value={a}>{a}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>優先度</Label>
-                      <Select value={(newTask.priority as any) ?? ''} onValueChange={(v) => setNewTask({ ...newTask, priority: v as any })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {PRIORITIES.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+          <Label className="mt-2">メモ</Label>
+          <Input
+            value={newTask.notes ?? ''}
+            onChange={(e) => setNewTask({ ...newTask, notes: e.target.value })}
+            placeholder="補足やURLなど"
+          />
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label>期限</Label>
-                      <Input type="date" value={newTask.due_date ?? ''} onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })} />
-                    </div>
-                    <div>
-                      <Label>顧客/区分</Label>
-                      <Input value={newTask.customer ?? ''} onChange={(e) => setNewTask({ ...newTask, customer: e.target.value })} />
-                    </div>
-                  </div>
-
-                  <Label className="mt-2">メモ</Label>
-                  <Input value={newTask.notes ?? ''} onChange={(e) => setNewTask({ ...newTask, notes: e.target.value })} placeholder="補足やURLなど" />
-
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button variant="secondary" onClick={() => setNewTask({ title: '', phase: PHASES[0], assignee: ASSIGNEES[0], priority: '中', due_date: '', customer: '社内標準（fleston）', notes: '' })}>クリア</Button>
-                    <Button onClick={addTask} className="gap-2"><Plus className="h-4 w-4" />追加</Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() =>
+                setNewTask({
+                  title: '',
+                  phase: PHASES[0],
+                  assignee: ASSIGNEES[0],
+                  priority: '中',
+                  due_date: '',
+                  customer: '社内標準（fleston）',
+                  notes: '',
+                })
+              }
+            >
+              クリア
+            </Button>
+            <Button onClick={addTask} className="gap-2">
+              <Plus className="h-4 w-4" />
+              追加
+            </Button>
           </div>
         </div>
+      </DialogContent>
+      {/* ここまでモーダル */}
+    </Dialog>
+  </div>
+</div>
+
 
         {/* Filters + KPI */}
         <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-3">
