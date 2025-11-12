@@ -234,7 +234,7 @@ export default function Page() {
 {/* Header */}
 <div className="mb-6 flex items-center justify-between">
   <div>
-    <h1 className="text-2xl font-semibold">ささげ内製化サービスプロジェクト</h1>
+    <h1 className="text-2xl font-semibold">ささげ内製化サービスプロジェクト2</h1>
     <p className="text-sm text-slate-500">MVPダッシュボード（Supabase 永続化対応）</p>
   </div>
 
